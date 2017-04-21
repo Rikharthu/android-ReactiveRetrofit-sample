@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.reactivex.Observable;
-import io.reactivex.ObservableSource;
 import io.reactivex.Observer;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.disposables.Disposable;
@@ -23,6 +22,7 @@ import io.reactivex.schedulers.Schedulers;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+import retrofit2.adapter.rxjava2.Result;
 
 public class MainActivity extends AppCompatActivity {
     private static final String LOG_TAG = MainActivity.class.getSimpleName();
@@ -53,37 +53,9 @@ public class MainActivity extends AppCompatActivity {
         fetchReposRx();
     }
 
-    private <T> Function<Response<List<T>> validateResponse(){
-        return new Function<Response<List<T>>(){
-
-            @Override
-            public ObservableSource<List<T>> apply(@NonNull Response<List<T>> listResponse) throws Exception {
-                // validate http response code
-
-                if(listResponse.isSuccessful()){
-                    return Observable.just(listResponse.body());
-                }else{
-                    return null;
-                }
-            }
-        };
-    }
-
     private void fetchReposRx() {
         mRxGitHubService.listRepos("rikharthu")
-                .flatMap(new Function<Response<List<Repo>>, ObservableSource<List<Repo>>>() {
-                    @Override
-                    public ObservableSource<List<Repo>> apply(@NonNull Response<List<Repo>> listResponse) throws Exception {
-                        // validate http response code
-
-                        if(listResponse.isSuccessful()){
-                            return Observable.just(listResponse.body());
-                        }else{
-                            return null;
-                        }
-                    }
-                })
-                .buffer(1)
+                .flatMap(this.<List<Repo>>apiResponseFunction())
                 .map(new Function<List<Repo>, List<Repo>>() {
                     @Override
                     public List<Repo> apply(@NonNull List<Repo> repos) throws Exception {
@@ -127,6 +99,26 @@ public class MainActivity extends AppCompatActivity {
                         Log.d(LOG_TAG, "onComplete");
                     }
                 });
+    }
+
+    /**
+     * Create an observable function that takes retrofit result and emits an observable of
+     * some generic type {@link T}. Function validates that retrofit call was a success
+     *
+     * @param <T> any generic type return from retrofit response.
+     * @return
+     */
+    private <T> Function<Result<T>, Observable<T>> apiResponseFunction() {
+        return new Function<Result<T>, Observable<T>>() {
+            @Override
+            public Observable<T> apply(@NonNull Result<T> result) throws Exception {
+                if (result.isError()) {
+                    return Observable.error(result.error());
+                } else {
+                    return Observable.just(result.response().body());
+                }
+            }
+        };
     }
 
     private void fetchRepos() {
